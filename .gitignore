@@ -1,0 +1,10 @@
+.vercel
+node_modules
+.DS_Store
+Thumbs.db
+security-test-results.txt
+
+# Local secrets — copy from config.example.js
+config.js
+.env
+.env.*
