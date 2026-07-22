@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Visit Stats | Abu Bakar</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .stats-page {
+      min-height: 100vh;
+      padding: calc(var(--header-h) + 2rem) 0 3rem;
+      background:
+        radial-gradient(ellipse 80% 50% at 10% 0%, var(--accent-glow), transparent 55%),
+        var(--bg);
+    }
+    .stats-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      margin-bottom: 1.5rem;
+    }
+    .stats-card h1 {
+      font-size: 1.5rem;
+      margin-bottom: 0.35rem;
+    }
+    .stats-card p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+    .stats-form {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-top: 1.25rem;
+    }
+    .stats-form input {
+      flex: 1 1 220px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font: inherit;
+      padding: 0.75rem 1rem;
+    }
+    .stats-form input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .stats-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+    .stats-pill {
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.85rem 1.1rem;
+      min-width: 140px;
+    }
+    .stats-pill strong {
+      display: block;
+      font-size: 1.35rem;
+      font-family: var(--mono);
+      color: var(--accent);
+    }
+    .stats-pill span {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+    .source-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .source-chip {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      background: var(--accent-glow);
+      border: 1px solid rgba(45, 212, 168, 0.35);
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 0.35rem 0.75rem;
+    }
+    .stats-table-wrap {
+      overflow-x: auto;
+    }
+    .stats-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    .stats-table th,
+    .stats-table td {
+      text-align: left;
+      padding: 0.7rem 0.6rem;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .stats-table th {
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .stats-table td {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+    }
+    .stats-error {
+      color: #f87171;
+      margin-top: 0.75rem;
+      font-size: 0.9rem;
+    }
+    .stats-note {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-top: 0.75rem;
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <main class="stats-page">
+    <div class="container">
+      <section class="stats-card" id="login-card">
+        <h1>Visit stats</h1>
+        <p>Private visit log. Not linked from the public site.</p>
+        <form class="stats-form" id="stats-login">
+          <input type="password" id="stats-password" placeholder="STATS_PASSWORD" required autocomplete="current-password" />
+          <button type="submit" class="btn btn-primary">View stats</button>
+        </form>
+        <p class="stats-error hidden" id="login-error"></p>
+      </section>
+
+      <section class="stats-card hidden" id="stats-panel">
+        <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;">
+          <div>
+            <h1>Visit log</h1>
+            <p id="storage-note">Loading…</p>
+          </div>
+          <div style="display:flex;gap:0.5rem;">
+            <button type="button" class="btn btn-secondary" id="refresh-btn">Refresh</button>
+            <button type="button" class="btn btn-secondary" id="logout-btn">Lock</button>
+          </div>
+        </div>
+
+        <div class="stats-meta" id="stats-meta"></div>
+        <div class="source-list" id="source-list"></div>
+        <div class="stats-table-wrap">
+          <table class="stats-table">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Source</th>
+                <th>Path</th>
+                <th>UTM</th>
+                <th>Referrer</th>
+                <th>Visitor</th>
+                <th>Country</th>
+                <th>Device</th>
+              </tr>
+            </thead>
+            <tbody id="visits-body"></tbody>
+          </table>
+        </div>
+        <p class="stats-note">Instagram often strips referrers — use UTM bio links for reliable Insta counts.</p>
+        <p class="stats-error hidden" id="panel-error"></p>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const STORAGE_KEY = "portfolio_stats_password";
+    const loginCard = document.getElementById("login-card");
+    const statsPanel = document.getElementById("stats-panel");
+    const loginForm = document.getElementById("stats-login");
+    const passwordInput = document.getElementById("stats-password");
+    const loginError = document.getElementById("login-error");
+    const panelError = document.getElementById("panel-error");
+    const statsMeta = document.getElementById("stats-meta");
+    const sourceList = document.getElementById("source-list");
+    const visitsBody = document.getElementById("visits-body");
+    const storageNote = document.getElementById("storage-note");
+
+    function show(el, on) {
+      el.classList.toggle("hidden", !on);
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function formatWhen(ts) {
+      try {
+        const d = new Date(ts);
+        if (Number.isNaN(d.getTime())) return String(ts || "—");
+        return d.toLocaleString();
+      } catch {
+        return String(ts || "—");
+      }
+    }
+
+    async function fetchStats(password) {
+      const res = await fetch("/api/stats", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${password}`,
+        },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to load stats");
+      }
+      return data;
+    }
+
+    function render(data) {
+      const bySource = data.bySource || {};
+      const sources = Object.entries(bySource).sort((a, b) => b[1] - a[1]);
+      statsMeta.innerHTML = `
+        <div class="stats-pill"><strong>${escapeHtml(data.total ?? 0)}</strong><span>Total visits</span></div>
+        <div class="stats-pill"><strong>${escapeHtml((data.visits || []).length)}</strong><span>Shown in log</span></div>
+        <div class="stats-pill"><strong>${escapeHtml(sources.length)}</strong><span>Sources</span></div>
+      `;
+      sourceList.innerHTML = sources.length
+        ? sources
+            .map(
+              ([name, count]) =>
+                `<span class="source-chip">${escapeHtml(name)}: ${escapeHtml(count)}</span>`
+            )
+            .join("")
+        : `<span class="source-chip">No visits yet</span>`;
+
+      storageNote.textContent =
+        data.storage === "upstash"
+          ? "Storage: Upstash Redis (durable)"
+          : "Storage: in-memory fallback (set Upstash env vars for durability)";
+
+      const visits = data.visits || [];
+      visitsBody.innerHTML = visits.length
+        ? visits
+            .map((v) => {
+              const utm = [v.utm_source, v.utm_medium, v.utm_campaign]
+                .filter(Boolean)
+                .join(" / ");
+              return `<tr>
+                <td>${escapeHtml(formatWhen(v.timestamp))}</td>
+                <td>${escapeHtml(v.source || "direct")}</td>
+                <td>${escapeHtml(v.path || "/")}</td>
+                <td>${escapeHtml(utm || "—")}</td>
+                <td title="${escapeHtml(v.referrer || "")}">${escapeHtml(
+                  (v.referrer || "—").slice(0, 48)
+                )}</td>
+                <td>${escapeHtml((v.visitorId || "—").slice(0, 10))}</td>
+                <td>${escapeHtml(v.country || "—")}</td>
+                <td>${escapeHtml(v.device || "—")}</td>
+              </tr>`;
+            })
+            .join("")
+        : `<tr><td colspan="8">No visits recorded yet.</td></tr>`;
+    }
+
+    async function unlock(password) {
+      show(loginError, false);
+      show(panelError, false);
+      const data = await fetchStats(password);
+      sessionStorage.setItem(STORAGE_KEY, password);
+      show(loginCard, false);
+      show(statsPanel, true);
+      render(data);
+    }
+
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const password = passwordInput.value;
+      try {
+        await unlock(password);
+      } catch (err) {
+        loginError.textContent = err.message || "Invalid password.";
+        show(loginError, true);
+      }
+    });
+
+    document.getElementById("refresh-btn").addEventListener("click", async () => {
+      const password = sessionStorage.getItem(STORAGE_KEY);
+      if (!password) return;
+      try {
+        show(panelError, false);
+        render(await fetchStats(password));
+      } catch (err) {
+        panelError.textContent = err.message || "Refresh failed.";
+        show(panelError, true);
+      }
+    });
+
+    document.getElementById("logout-btn").addEventListener("click", () => {
+      sessionStorage.removeItem(STORAGE_KEY);
+      passwordInput.value = "";
+      show(statsPanel, false);
+      show(loginCard, true);
+    });
+
+    const saved = sessionStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      unlock(saved).catch(() => {
+        sessionStorage.removeItem(STORAGE_KEY);
+      });
+    }
+  </script>
+</body>
+</html>

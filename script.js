@@ -8,6 +8,8 @@ const config = window.PORTFOLIO_CONFIG || {};
 const STORAGE_KEY = "portfolio_submitted_emails";
 const COOLDOWN_KEY = "portfolio_last_submit_at";
 const RATE_KEY = "portfolio_submit_hits";
+const VISITOR_KEY = "portfolio_visitor_id";
+const TRAFFIC_KEY = "portfolio_traffic_source";
 const CLIENT_COOLDOWN_MS = 60 * 1000;
 const CLIENT_MAX_PER_HOUR = 5;
 const CLIENT_RATE_WINDOW_MS = 60 * 60 * 1000;
@@ -16,7 +18,133 @@ const DUPLICATE_MESSAGE =
 const RATE_MESSAGE =
   "Too many requests. Please try again after some time (max 5 per hour).";
 
-yearEl.textContent = new Date().getFullYear();
+if (yearEl) yearEl.textContent = new Date().getFullYear();
+
+function getOrCreateVisitorId() {
+  try {
+    let id = localStorage.getItem(VISITOR_KEY);
+    if (!id) {
+      id =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `v_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem(VISITOR_KEY, id);
+    }
+    return id;
+  } catch {
+    return `v_${Date.now().toString(36)}`;
+  }
+}
+
+function hostFromReferrer(referrer) {
+  try {
+    if (!referrer) return "";
+    return new URL(referrer).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function mapPlatform(utmSource, referrer) {
+  const utm = String(utmSource || "").toLowerCase().trim();
+  if (utm) {
+    if (utm.includes("linkedin")) return "linkedin";
+    if (utm.includes("instagram") || utm === "ig") return "instagram";
+    if (utm.includes("github")) return "github";
+    if (utm.includes("twitter") || utm === "x") return "twitter";
+    if (utm.includes("facebook") || utm === "fb") return "facebook";
+    if (utm.includes("google")) return "google";
+    return utm.replace(/[^a-z0-9_-]/g, "").slice(0, 40) || "other";
+  }
+
+  const host = hostFromReferrer(referrer);
+  if (!host) return "direct";
+  if (host.includes("linkedin.") || host === "lnkd.in") return "linkedin";
+  if (host.includes("instagram.") || host === "l.instagram.com") return "instagram";
+  if (host.includes("github.")) return "github";
+  if (host.includes("twitter.") || host === "t.co" || host === "x.com") return "twitter";
+  if (host.includes("facebook.") || host === "fb.com" || host === "m.facebook.com")
+    return "facebook";
+  if (host.includes("google.") || host === "google.com") return "google";
+  return host.split(".")[0] || "referral";
+}
+
+function captureTrafficContext() {
+  const params = new URLSearchParams(window.location.search);
+  const utm_source = params.get("utm_source") || "";
+  const utm_medium = params.get("utm_medium") || "";
+  const utm_campaign = params.get("utm_campaign") || "";
+  const refParam = params.get("ref") || "";
+  const referrer = document.referrer || "";
+  const source = mapPlatform(utm_source || refParam, referrer);
+
+  const ctx = {
+    source,
+    utm_source,
+    utm_medium,
+    utm_campaign,
+    referrer,
+    ref: refParam,
+    visitorId: getOrCreateVisitorId(),
+    path: window.location.pathname + window.location.search,
+    timestamp: new Date().toISOString(),
+  };
+
+  try {
+    sessionStorage.setItem(TRAFFIC_KEY, JSON.stringify(ctx));
+  } catch {
+    /* ignore */
+  }
+  return ctx;
+}
+
+function getTrafficContext() {
+  try {
+    const raw = sessionStorage.getItem(TRAFFIC_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") return parsed;
+    }
+  } catch {
+    /* ignore */
+  }
+  return captureTrafficContext();
+}
+
+function sendVisitBeacon(ctx) {
+  const payload = {
+    source: ctx.source,
+    utm_source: ctx.utm_source,
+    utm_medium: ctx.utm_medium,
+    utm_campaign: ctx.utm_campaign,
+    referrer: ctx.referrer,
+    visitorId: ctx.visitorId,
+    path: ctx.path,
+    timestamp: ctx.timestamp,
+  };
+
+  try {
+    if (navigator.sendBeacon) {
+      const blob = new Blob([JSON.stringify(payload)], {
+        type: "application/json",
+      });
+      navigator.sendBeacon("/api/visit", blob);
+      return;
+    }
+  } catch {
+    /* fall through */
+  }
+
+  fetch("/api/visit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+    keepalive: true,
+  }).catch(() => {});
+}
+
+const trafficContext = captureTrafficContext();
+sendVisitBeacon(trafficContext);
 
 document.querySelectorAll("[data-scroll-top]").forEach((link) => {
   link.addEventListener("click", (e) => {
@@ -123,6 +251,18 @@ function showStatus(formStatus, text, type) {
 }
 
 async function sendToWeb3Forms({ name, email, type, message }) {
+  const traffic = getTrafficContext();
+  const cameFrom = [
+    traffic.source && `Came from: ${traffic.source}`,
+    traffic.utm_source && `utm_source=${traffic.utm_source}`,
+    traffic.utm_medium && `utm_medium=${traffic.utm_medium}`,
+    traffic.utm_campaign && `utm_campaign=${traffic.utm_campaign}`,
+    traffic.ref && `ref=${traffic.ref}`,
+    traffic.referrer && `referrer=${traffic.referrer}`,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+
   const response = await fetch("https://api.web3forms.com/submit", {
     method: "POST",
     headers: {
@@ -137,6 +277,12 @@ async function sendToWeb3Forms({ name, email, type, message }) {
       email,
       type,
       message,
+      source: traffic.source || "direct",
+      utm_source: traffic.utm_source || "",
+      utm_medium: traffic.utm_medium || "",
+      utm_campaign: traffic.utm_campaign || "",
+      referrer: traffic.referrer || "",
+      traffic_source: cameFrom || "Came from: direct",
     }),
   });
   const data = await response.json();
