@@ -1,5 +1,6 @@
 const VISITS_KEY = "portfolio:visits";
 const COUNTS_KEY = "portfolio:source_counts";
+const LEADS_KEY = "portfolio:linkedin_leads";
 const MAX_RETURN = 200;
 
 function getStore() {
@@ -11,6 +12,17 @@ function getStore() {
     };
   }
   return globalThis.__portfolioVisitStore;
+}
+
+function getLeadStore() {
+  if (!globalThis.__portfolioLinkedInStore) {
+    globalThis.__portfolioLinkedInStore = {
+      ipHits: new Map(),
+      urls: new Map(),
+      leads: [],
+    };
+  }
+  return globalThis.__portfolioLinkedInStore;
 }
 
 function hasUpstash() {
@@ -67,23 +79,29 @@ function json(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+function parseListItems(raw) {
+  const items = Array.isArray(raw) ? raw : [];
+  return items
+    .map((item) => {
+      try {
+        return typeof item === "string" ? JSON.parse(item) : item;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
 async function loadStats() {
   if (hasUpstash()) {
-    const [visitsRes, countsRes] = await Promise.all([
+    const [visitsRes, countsRes, leadsRes] = await Promise.all([
       redisCommand(["LRANGE", VISITS_KEY, 0, MAX_RETURN - 1]),
       redisCommand(["HGETALL", COUNTS_KEY]),
+      redisCommand(["LRANGE", LEADS_KEY, 0, MAX_RETURN - 1]),
     ]);
 
-    const rawVisits = Array.isArray(visitsRes?.result) ? visitsRes.result : [];
-    const visits = rawVisits
-      .map((item) => {
-        try {
-          return typeof item === "string" ? JSON.parse(item) : item;
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
+    const visits = parseListItems(visitsRes?.result);
+    const linkedinLeads = parseListItems(leadsRes?.result);
 
     const flat = Array.isArray(countsRes?.result) ? countsRes.result : [];
     const bySource = {};
@@ -97,15 +115,21 @@ async function loadStats() {
       total: Object.values(bySource).reduce((a, b) => a + b, 0),
       bySource,
       visits,
+      linkedinLeads,
+      linkedinLeadCount: linkedinLeads.length,
       storage: "upstash",
     };
   }
 
   const store = getStore();
+  const leadStore = getLeadStore();
+  const linkedinLeads = leadStore.leads.slice(0, MAX_RETURN);
   return {
     total: store.visits.length,
     bySource: { ...store.sourceCounts },
     visits: store.visits.slice(0, MAX_RETURN),
+    linkedinLeads,
+    linkedinLeadCount: linkedinLeads.length,
     storage: "memory",
   };
 }

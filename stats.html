@@ -174,6 +174,25 @@
           </table>
         </div>
         <p class="stats-note">Instagram often strips referrers — use UTM bio links for reliable Insta counts.</p>
+
+        <h2 style="margin:2rem 0 0.35rem;font-size:1.25rem;">LinkedIn leads</h2>
+        <p class="stats-note" style="margin-top:0;margin-bottom:1rem;">Voluntary LinkedIn URLs left from the contact area.</p>
+        <div class="stats-meta" id="leads-meta"></div>
+        <div class="stats-table-wrap">
+          <table class="stats-table">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Name</th>
+                <th>LinkedIn</th>
+                <th>Source</th>
+                <th>Visitor</th>
+                <th>Referrer</th>
+              </tr>
+            </thead>
+            <tbody id="leads-body"></tbody>
+          </table>
+        </div>
         <p class="stats-error hidden" id="panel-error"></p>
       </section>
     </div>
@@ -188,8 +207,10 @@
     const loginError = document.getElementById("login-error");
     const panelError = document.getElementById("panel-error");
     const statsMeta = document.getElementById("stats-meta");
+    const leadsMeta = document.getElementById("leads-meta");
     const sourceList = document.getElementById("source-list");
     const visitsBody = document.getElementById("visits-body");
+    const leadsBody = document.getElementById("leads-body");
     const storageNote = document.getElementById("storage-note");
 
     function show(el, on) {
@@ -234,10 +255,12 @@
     function render(data) {
       const bySource = data.bySource || {};
       const sources = Object.entries(bySource).sort((a, b) => b[1] - a[1]);
+      const leads = data.linkedinLeads || [];
       statsMeta.innerHTML = `
         <div class="stats-pill"><strong>${escapeHtml(data.total ?? 0)}</strong><span>Total visits</span></div>
         <div class="stats-pill"><strong>${escapeHtml((data.visits || []).length)}</strong><span>Shown in log</span></div>
         <div class="stats-pill"><strong>${escapeHtml(sources.length)}</strong><span>Sources</span></div>
+        <div class="stats-pill"><strong>${escapeHtml(data.linkedinLeadCount ?? leads.length)}</strong><span>LinkedIn leads</span></div>
       `;
       sourceList.innerHTML = sources.length
         ? sources
@@ -275,6 +298,28 @@
             })
             .join("")
         : `<tr><td colspan="8">No visits recorded yet.</td></tr>`;
+
+      leadsMeta.innerHTML = `
+        <div class="stats-pill"><strong>${escapeHtml(leads.length)}</strong><span>Shown in log</span></div>
+      `;
+      leadsBody.innerHTML = leads.length
+        ? leads
+            .map((lead) => {
+              const url = lead.linkedinUrl || "";
+              const shortUrl = url.replace(/^https?:\/\/(www\.)?/i, "");
+              return `<tr>
+                <td>${escapeHtml(formatWhen(lead.timestamp))}</td>
+                <td>${escapeHtml(lead.name || "—")}</td>
+                <td><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">${escapeHtml(shortUrl || "—")}</a></td>
+                <td>${escapeHtml(lead.source || "direct")}</td>
+                <td>${escapeHtml((lead.visitorId || "—").slice(0, 10))}</td>
+                <td title="${escapeHtml(lead.referrer || "")}">${escapeHtml(
+                  (lead.referrer || "—").slice(0, 48)
+                )}</td>
+              </tr>`;
+            })
+            .join("")
+        : `<tr><td colspan="6">No LinkedIn leads yet.</td></tr>`;
     }
 
     async function unlock(password) {

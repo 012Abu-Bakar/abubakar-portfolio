@@ -788,6 +788,45 @@ img {
   gap: 1rem;
 }
 
+.linkedin-capture {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.linkedin-capture-copy {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  margin: 0 0 1rem;
+  max-width: 34ch;
+}
+
+.linkedin-form .form-status {
+  margin-bottom: 1rem;
+}
+
+.linkedin-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.linkedin-form .form-group {
+  margin-bottom: 0.9rem;
+}
+
+.linkedin-form .optional-label {
+  color: var(--text-muted);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.linkedin-form .btn {
+  width: 100%;
+}
+
 .contact-link {
   display: flex;
   flex-direction: column;

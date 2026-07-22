@@ -3,11 +3,15 @@ const navToggle = document.querySelector(".nav-toggle");
 const navLinks = document.querySelector(".nav-links");
 const yearEl = document.getElementById("year");
 const contactForm = document.getElementById("contact-form");
+const linkedinForm = document.getElementById("linkedin-form");
 const config = window.PORTFOLIO_CONFIG || {};
 
 const STORAGE_KEY = "portfolio_submitted_emails";
 const COOLDOWN_KEY = "portfolio_last_submit_at";
 const RATE_KEY = "portfolio_submit_hits";
+const LI_STORAGE_KEY = "portfolio_submitted_linkedin";
+const LI_COOLDOWN_KEY = "portfolio_linkedin_last_submit_at";
+const LI_RATE_KEY = "portfolio_linkedin_submit_hits";
 const VISITOR_KEY = "portfolio_visitor_id";
 const TRAFFIC_KEY = "portfolio_traffic_source";
 const CLIENT_COOLDOWN_MS = 60 * 1000;
@@ -15,6 +19,8 @@ const CLIENT_MAX_PER_HOUR = 5;
 const CLIENT_RATE_WINDOW_MS = 60 * 60 * 1000;
 const DUPLICATE_MESSAGE =
   "We have received your response. We will connect with you soon.";
+const LI_DUPLICATE_MESSAGE =
+  "Thanks — I've already got your LinkedIn. I'll follow up soon.";
 const RATE_MESSAGE =
   "Too many requests. Please try again after some time (max 5 per hour).";
 
@@ -205,6 +211,45 @@ function isValidEmailFormat(email) {
   return re.test(email);
 }
 
+function normalizeLinkedInUrl(raw) {
+  let input = String(raw || "").trim();
+  if (!input) return null;
+  if (!/^https?:\/\//i.test(input)) {
+    input = `https://${input}`;
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(input);
+  } catch {
+    return null;
+  }
+
+  const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+  const isLinkedInHost =
+    host === "linkedin.com" ||
+    host === "lnkd.in" ||
+    /^[a-z]{2}\.linkedin\.com$/.test(host);
+
+  if (!isLinkedInHost) return null;
+
+  if (host === "lnkd.in") {
+    const path = parsed.pathname.replace(/\/+$/, "");
+    if (!/^\/[A-Za-z0-9_-]+$/.test(path)) return null;
+    return `https://lnkd.in${path}`;
+  }
+
+  const path = parsed.pathname.replace(/\/+$/, "") || "/";
+  const profilePath =
+    /^\/in\/[A-Za-z0-9._%-]+$/i.test(path) ||
+    /^\/pub\/[A-Za-z0-9._%-]+(\/[A-Za-z0-9._%-]+){0,4}$/i.test(path) ||
+    /^\/mwlite\/in\/[A-Za-z0-9._%-]+$/i.test(path) ||
+    /^\/company\/[A-Za-z0-9._%-]+$/i.test(path);
+
+  if (!profilePath) return null;
+  return `https://www.linkedin.com${path}`;
+}
+
 function getSubmittedEmails() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -235,6 +280,46 @@ function recordClientHit() {
   localStorage.setItem(COOLDOWN_KEY, String(now));
 }
 
+function getSubmittedLinkedIn() {
+  try {
+    const raw = localStorage.getItem(LI_STORAGE_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+function getLinkedInClientHits() {
+  try {
+    const raw = localStorage.getItem(LI_RATE_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    const now = Date.now();
+    return Array.isArray(list)
+      ? list.filter((t) => typeof t === "number" && now - t < CLIENT_RATE_WINDOW_MS)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function recordLinkedInClientHit() {
+  const now = Date.now();
+  const hits = [...getLinkedInClientHits(), now];
+  localStorage.setItem(LI_RATE_KEY, JSON.stringify(hits));
+  localStorage.setItem(LI_COOLDOWN_KEY, String(now));
+}
+
+function markLinkedInSubmitted(url) {
+  const key = String(url || "").toLowerCase();
+  const list = getSubmittedLinkedIn();
+  if (key && !list.includes(key)) {
+    list.push(key);
+    localStorage.setItem(LI_STORAGE_KEY, JSON.stringify(list));
+  }
+  recordLinkedInClientHit();
+}
+
 function markEmailSubmitted(email) {
   const list = getSubmittedEmails();
   if (!list.includes(email)) {
@@ -250,9 +335,8 @@ function showStatus(formStatus, text, type) {
   formStatus.hidden = false;
 }
 
-async function sendToWeb3Forms({ name, email, type, message }) {
-  const traffic = getTrafficContext();
-  const cameFrom = [
+function buildTrafficSummary(traffic) {
+  return [
     traffic.source && `Came from: ${traffic.source}`,
     traffic.utm_source && `utm_source=${traffic.utm_source}`,
     traffic.utm_medium && `utm_medium=${traffic.utm_medium}`,
@@ -262,6 +346,11 @@ async function sendToWeb3Forms({ name, email, type, message }) {
   ]
     .filter(Boolean)
     .join(" | ");
+}
+
+async function sendToWeb3Forms({ name, email, type, message }) {
+  const traffic = getTrafficContext();
+  const cameFrom = buildTrafficSummary(traffic);
 
   const response = await fetch("https://api.web3forms.com/submit", {
     method: "POST",
@@ -283,6 +372,48 @@ async function sendToWeb3Forms({ name, email, type, message }) {
       utm_campaign: traffic.utm_campaign || "",
       referrer: traffic.referrer || "",
       traffic_source: cameFrom || "Came from: direct",
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || "Failed to send");
+  }
+}
+
+async function sendLinkedInLeadToWeb3Forms({ name, linkedinUrl }) {
+  const traffic = getTrafficContext();
+  const cameFrom = buildTrafficSummary(traffic);
+  const displayName = name || "LinkedIn prospect";
+
+  const response = await fetch("https://api.web3forms.com/submit", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      access_key: config.WEB3FORMS_ACCESS_KEY,
+      subject: "Portfolio LinkedIn Lead",
+      from_name: "Abu Bakar Portfolio",
+      name: displayName,
+      email: "abubakartechab@gmail.com",
+      replyto: "abubakartechab@gmail.com",
+      type: "linkedin-lead",
+      message: [
+        "Someone left their LinkedIn on the portfolio.",
+        name ? `Name: ${name}` : "Name: (not provided)",
+        `LinkedIn: ${linkedinUrl}`,
+        `Visitor: ${traffic.visitorId || "—"}`,
+        cameFrom || "Came from: direct",
+      ].join("\n"),
+      linkedin_url: linkedinUrl,
+      source: traffic.source || "direct",
+      utm_source: traffic.utm_source || "",
+      utm_medium: traffic.utm_medium || "",
+      utm_campaign: traffic.utm_campaign || "",
+      referrer: traffic.referrer || "",
+      traffic_source: cameFrom || "Came from: direct",
+      visitor_id: traffic.visitorId || "",
     }),
   });
   const data = await response.json();
@@ -454,6 +585,149 @@ if (contactForm) {
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = "Send Message";
+    }
+  });
+}
+
+if (linkedinForm) {
+  const linkedinStatus = document.getElementById("linkedin-form-status");
+  const linkedinSubmitBtn = document.getElementById("linkedin-submit-btn");
+  const linkedinUrlInput = document.getElementById("linkedin-url");
+
+  linkedinUrlInput?.addEventListener("blur", () => {
+    const normalized = normalizeLinkedInUrl(linkedinUrlInput.value);
+    if (linkedinUrlInput.value.trim() && !normalized) {
+      linkedinUrlInput.setCustomValidity(
+        "Please enter a valid LinkedIn profile URL."
+      );
+    } else {
+      linkedinUrlInput.setCustomValidity("");
+    }
+  });
+
+  linkedinForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const name = document.getElementById("linkedin-name")?.value.trim() || "";
+    const linkedinUrl = normalizeLinkedInUrl(
+      document.getElementById("linkedin-url")?.value || ""
+    );
+    const botcheck = linkedinForm.querySelector('[name="botcheck"]')?.checked;
+    const traffic = getTrafficContext();
+
+    linkedinStatus.hidden = true;
+    linkedinStatus.className = "form-status";
+
+    if (!isConfigured(config.WEB3FORMS_ACCESS_KEY)) {
+      showStatus(
+        linkedinStatus,
+        "Form not configured. Please email abubakartechab@gmail.com directly.",
+        "error"
+      );
+      return;
+    }
+
+    if (!linkedinUrl) {
+      showStatus(
+        linkedinStatus,
+        "Please enter a valid LinkedIn profile URL (e.g. linkedin.com/in/your-name).",
+        "error"
+      );
+      return;
+    }
+
+    if (getSubmittedLinkedIn().includes(linkedinUrl.toLowerCase())) {
+      showStatus(linkedinStatus, LI_DUPLICATE_MESSAGE, "success");
+      linkedinForm.reset();
+      return;
+    }
+
+    const lastSubmit = Number(localStorage.getItem(LI_COOLDOWN_KEY) || 0);
+    if (Date.now() - lastSubmit < CLIENT_COOLDOWN_MS) {
+      showStatus(
+        linkedinStatus,
+        "Please wait a moment before submitting again.",
+        "error"
+      );
+      return;
+    }
+
+    if (getLinkedInClientHits().length >= CLIENT_MAX_PER_HOUR) {
+      showStatus(linkedinStatus, RATE_MESSAGE, "error");
+      return;
+    }
+
+    linkedinSubmitBtn.disabled = true;
+    linkedinSubmitBtn.textContent = "Sending...";
+
+    try {
+      const gateRes = await fetch("/api/linkedin-lead", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          linkedinUrl,
+          botcheck: botcheck ? "1" : "",
+          visitorId: traffic.visitorId || "",
+          source: traffic.source || "direct",
+          referrer: traffic.referrer || "",
+        }),
+      });
+
+      const gate = await gateRes.json().catch(() => ({}));
+
+      if (gateRes.status === 429) {
+        recordLinkedInClientHit();
+        showStatus(linkedinStatus, gate.message || RATE_MESSAGE, "error");
+        return;
+      }
+
+      if (!gateRes.ok || !gate.success) {
+        showStatus(
+          linkedinStatus,
+          gate.message ||
+            "Something went wrong. Please email me directly at abubakartechab@gmail.com",
+          "error"
+        );
+        return;
+      }
+
+      if (gate.duplicate || gate.allowed === false) {
+        markLinkedInSubmitted(linkedinUrl);
+        showStatus(
+          linkedinStatus,
+          gate.message || LI_DUPLICATE_MESSAGE,
+          "success"
+        );
+        linkedinForm.reset();
+        return;
+      }
+
+      const payload = gate.sanitized || { name, linkedinUrl };
+
+      // Browser-side delivery (same Web3Forms free-plan pattern as contact)
+      await sendLinkedInLeadToWeb3Forms(payload);
+
+      markLinkedInSubmitted(payload.linkedinUrl || linkedinUrl);
+      showStatus(
+        linkedinStatus,
+        gate.message || "Thanks — I'll follow up on LinkedIn soon.",
+        "success"
+      );
+      linkedinForm.reset();
+    } catch {
+      showStatus(
+        linkedinStatus,
+        "Something went wrong. Please email me directly at abubakartechab@gmail.com",
+        "error"
+      );
+    } finally {
+      linkedinSubmitBtn.disabled = false;
+      linkedinSubmitBtn.textContent = "Leave LinkedIn";
     }
   });
 }

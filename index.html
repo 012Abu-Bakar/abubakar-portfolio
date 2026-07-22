@@ -468,6 +468,35 @@
                 <span>linkedin.com/in/abubakar-victor</span>
               </a>
             </div>
+
+            <div class="linkedin-capture" id="linkedin-capture">
+              <p class="linkedin-capture-copy">
+                Interested in working together? Leave your LinkedIn and I'll follow up.
+              </p>
+              <form class="linkedin-form" id="linkedin-form" novalidate>
+                <input type="checkbox" name="botcheck" class="form-honey" tabindex="-1" autocomplete="off" aria-hidden="true" />
+                <div id="linkedin-form-status" class="form-status" hidden></div>
+                <div class="linkedin-form-row">
+                  <div class="form-group linkedin-form-url">
+                    <label for="linkedin-url">LinkedIn URL</label>
+                    <input
+                      type="url"
+                      id="linkedin-url"
+                      name="linkedinUrl"
+                      required
+                      inputmode="url"
+                      autocomplete="url"
+                      placeholder="https://www.linkedin.com/in/your-name"
+                    />
+                  </div>
+                  <div class="form-group linkedin-form-name">
+                    <label for="linkedin-name">Name <span class="optional-label">(optional)</span></label>
+                    <input type="text" id="linkedin-name" name="name" autocomplete="name" placeholder="Your name" />
+                  </div>
+                </div>
+                <button type="submit" class="btn btn-secondary" id="linkedin-submit-btn">Leave LinkedIn</button>
+              </form>
+            </div>
           </div>
           <form class="contact-form" id="contact-form">
             <input type="checkbox" name="botcheck" class="form-honey" tabindex="-1" autocomplete="off" />
